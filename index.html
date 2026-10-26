@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LinkedIn Capture → Workbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Palette and type deliberately match the Edge Capture Runbook, so the pack
+   reads as one system rather than two unrelated tools. */
+:root{
+  --ground:#FBFCFD; --surface:#F1F5F9; --surface-2:#E5EDF3;
+  --line:#D3DFE8; --line-soft:#E4ECF2;
+  --ink:#16212C; --ink-2:#4A5C6D; --ink-3:#7A8C9C;
+  --accent:#0B6E78; --accent-soft:#D6EDEF; --accent-ink:#06525a;
+  --warn:#9A5B08; --warn-soft:#FBEEDB; --warn-line:#E5C089;
+  --ok:#1C6B3F; --ok-soft:#DCF0E4;
+  --err:#9B2C2C; --err-soft:#FBE4E4;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0C131A; --surface:#141E28; --surface-2:#1B2733;
+    --line:#26343F; --line-soft:#1E2A35;
+    --ink:#DCE7F0; --ink-2:#9DB0C0; --ink-3:#6F8394;
+    --accent:#48C2CB; --accent-soft:#123039; --accent-ink:#9FE4E9;
+    --warn:#E9B463; --warn-soft:#2B2214; --warn-line:#5C4620;
+    --ok:#6FD39A; --ok-soft:#10261A;
+    --err:#F0A0A0; --err-soft:#2B1515;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0C131A; --surface:#141E28; --surface-2:#1B2733;
+  --line:#26343F; --line-soft:#1E2A35;
+  --ink:#DCE7F0; --ink-2:#9DB0C0; --ink-3:#6F8394;
+  --accent:#48C2CB; --accent-soft:#123039; --accent-ink:#9FE4E9;
+  --warn:#E9B463; --warn-soft:#2B2214; --warn-line:#5C4620;
+  --ok:#6FD39A; --ok-soft:#10261A;
+  --err:#F0A0A0; --err-soft:#2B1515;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font:400 16px/1.6 "Source Sans 3",ui-sans-serif,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:54rem;margin:0 auto;padding:3.5rem 1.5rem 5rem}
+
+.mast{border-bottom:2px solid var(--ink);padding-bottom:1.3rem;margin-bottom:1.6rem}
+.kicker{font:600 11px/1 "JetBrains Mono",monospace;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 .8rem}
+h1{font:700 clamp(1.9rem,5vw,2.6rem)/1.05 Archivo,sans-serif;
+  letter-spacing:-.025em;margin:0 0 .6rem;text-wrap:balance}
+.standfirst{font-size:1.03rem;color:var(--ink-2);margin:0;max-width:38rem}
+
+h2{font:600 1.15rem/1.25 Archivo,sans-serif;letter-spacing:-.01em;margin:2.4rem 0 .5rem}
+.sub{color:var(--ink-3);font-size:.92rem;margin:0 0 1rem}
+
+/* ---- drop zone ---- */
+#drop{border:2px dashed var(--line);border-radius:10px;padding:2.4rem 1.5rem;
+  text-align:center;background:var(--surface);transition:border-color .15s,background .15s;
+  cursor:pointer}
+#drop:hover,#drop.over{border-color:var(--accent);background:var(--accent-soft)}
+#drop.over{border-style:solid}
+#drop p{margin:0}
+.dz-main{font:600 1.02rem/1.4 Archivo,sans-serif}
+.dz-sub{color:var(--ink-3);font-size:.9rem;margin-top:.4rem!important}
+#file{display:none}
+
+/* ---- file chips ---- */
+.files{display:flex;flex-direction:column;gap:.5rem;margin-top:1rem}
+.chip{display:flex;align-items:center;gap:.75rem;padding:.7rem .9rem;
+  border:1px solid var(--line);border-radius:7px;background:var(--surface);font-size:.92rem}
+.chip .nm{font:600 12.5px/1.4 "JetBrains Mono",monospace;color:var(--ink)}
+.chip .meta{color:var(--ink-3);font-size:.86rem;margin-left:auto;
+  font-variant-numeric:tabular-nums;text-align:right}
+.chip.bad{border-color:var(--err);background:var(--err-soft)}
+.chip .x{background:none;border:0;color:var(--ink-3);cursor:pointer;font-size:17px;
+  line-height:1;padding:0 .2rem}
+.chip .x:hover{color:var(--err)}
+
+/* ---- controls ---- */
+.controls{display:flex;flex-wrap:wrap;gap:1.2rem;align-items:flex-end;margin-top:1.2rem}
+.ctl{display:flex;flex-direction:column;gap:.35rem}
+.ctl label{font:600 10.5px/1 "JetBrains Mono",monospace;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-2)}
+select,input[type=number]{font:400 14px/1 "Source Sans 3",sans-serif;padding:.5rem .6rem;
+  border:1px solid var(--line);border-radius:6px;background:var(--ground);color:var(--ink)}
+button.go{font:600 14px/1 Archivo,sans-serif;padding:.72rem 1.4rem;border:0;border-radius:7px;
+  background:var(--accent);color:#fff;cursor:pointer;margin-left:auto}
+button.go:disabled{opacity:.4;cursor:not-allowed}
+button.go:hover:not(:disabled){filter:brightness(1.1)}
+
+/* ---- table ---- */
+.scroll{overflow-x:auto;margin-top:1rem;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th{background:var(--surface-2);font:600 11px/1.3 "JetBrains Mono",monospace;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);
+  padding:.65rem .75rem;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+td{padding:.6rem .75rem;border-bottom:1px solid var(--line-soft);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.h{font:600 12.5px/1.4 "JetBrains Mono",monospace}
+td.num{text-align:right}
+
+/* ---- notes ---- */
+.note{border:1px solid var(--warn-line);background:var(--warn-soft);border-radius:7px;
+  padding:.85rem 1rem;margin-top:1rem;font-size:.93rem}
+.note.ok{border-color:var(--ok);background:var(--ok-soft)}
+.note.err{border-color:var(--err);background:var(--err-soft)}
+.note b{display:block;font:600 10.5px/1 "JetBrains Mono",monospace;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--warn);margin-bottom:.4rem}
+.note.ok b{color:var(--ok)} .note.err b{color:var(--err)}
+.note p{margin:0}
+.hide{display:none}
+
+.limits{margin-top:3rem;border-top:1px solid var(--line);padding-top:1.6rem}
+.limits dl{margin:0;display:flex;flex-direction:column;gap:.9rem}
+.limits dt{font-weight:600;font-size:.95rem}
+.limits dd{margin:0;color:var(--ink-2);font-size:.92rem}
+code{font:400 .88em/1.4 "JetBrains Mono",monospace;background:var(--surface-2);
+  padding:.12em .36em;border-radius:3px}
+.tail{margin-top:2.4rem;padding-top:1.2rem;border-top:1px solid var(--line-soft);
+  font-size:.86rem;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="mast">
+    <p class="kicker">LinkedIn pack · no-code</p>
+    <h1>Capture → Workbook</h1>
+    <p class="standfirst">Drop the JSON files from the capture snippet and get the analysis workbook back. Everything runs in your browser — nothing is uploaded anywhere.</p>
+  </header>
+
+  <div id="drop" role="button" tabindex="0" aria-label="Choose or drop capture files">
+    <p class="dz-main">Drop <code>licapture_*.json</code> files here</p>
+    <p class="dz-sub">or click to choose · add several handles to get a Benchmark sheet</p>
+  </div>
+  <input type="file" id="file" multiple accept=".json,application/json">
+
+  <div class="files" id="files"></div>
+
+  <div class="controls hide" id="controls">
+    <div class="ctl">
+      <label for="months">Window</label>
+      <select id="months">
+        <option value="3" selected>Last 3 months</option>
+        <option value="6">Last 6 months</option>
+        <option value="12">Last 12 months</option>
+        <option value="0">Everything captured</option>
+      </select>
+    </div>
+    <div class="ctl">
+      <label for="minEng">Min engagement</label>
+      <input type="number" id="minEng" value="0" min="0" step="1" style="width:7rem">
+    </div>
+    <button class="go" id="build" disabled>Build workbook</button>
+  </div>
+
+  <div id="msg"></div>
+
+  <section id="previewWrap" class="hide">
+    <h2>Preview</h2>
+    <p class="sub" id="previewSub"></p>
+    <div class="scroll"><table id="preview"></table></div>
+  </section>
+
+  <section class="limits">
+    <h2 style="margin-top:0">What this can and can't tell you</h2>
+    <dl>
+      <dt>There is no true engagement rate.</dt>
+      <dd>Impressions are visible only to page admins, so rate here is engagement ÷ followers. Fine for comparing pages against each other and for tracking one page over time. Not comparable to the rate in your own page analytics.</dd>
+
+      <dt>Totals don't compare across handles; rates do.</dt>
+      <dd>Capture windows differ per handle, so the Benchmark sheet leads with posts/week, average engagement and the % commented / % reposted columns. Raw totals are in the Posts sheet for reference only.</dd>
+
+      <dt>Check the handles are the same kind of entity.</dt>
+      <dd>A global corporate page and a country subsidiary are not peers, however similar the brand. The workbook can't tell the difference — you have to.</dd>
+
+      <dt>Rows with zero engagement usually aren't dead posts.</dt>
+      <dd>They're posts whose counts hadn't rendered before the scroll passed them. Capture that handle again more slowly and drop both files in — posts dedupe by ID and the second pass fills the gaps.</dd>
+    </dl>
+  </section>
+
+  <p class="tail">Self-contained: open from disk or host it anywhere. The only external requests are the font stylesheet and the SheetJS library. Your capture files never leave the browser.</p>
+</div>
+
+<script>
+'use strict';
+
+/* ------------------------------------------------------------------ *
+ * Mirrors capture/parse_capture.py. Keep the two in step — the schema
+ * is shared so both paths produce the same workbook.
+ * ------------------------------------------------------------------ */
+
+const HASHTAG_LABEL = /\bhashtag\s+#/g;
+const FOLLOWER_ONLY = /^[\d][\d,.]*\s*[KM]?\s*followers?$/i;
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+/** LinkedIn renders each hashtag with a visually-hidden "hashtag" label for
+ *  screen readers, which innerText returns. Strip it. A caption that is only a
+ *  follower count is the page header leaking in, not a post body. */
+function cleanText(t){
+  t = String(t || '').replace(HASHTAG_LABEL, '#')
+       .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return FOLLOWER_ONLY.test(t) ? '' : t;
+}
+
+/** Activity IDs are snowflake-like: the high bits are a ms timestamp. Deriving
+ *  date and URL from the ID means both survive any LinkedIn redesign. */
+function urnDate(id){
+  try{
+    const ms = Number(BigInt(id) >> 22n);
+    if (ms > 1104537600000 && ms < Date.now() + 864e5) return new Date(ms);
+  }catch(e){}
+  return null;
+}
+
+const iso = d => d.toISOString().slice(0,10);
+const fmt1 = n => (Math.round(n*10)/10).toLocaleString();
+const pct  = n => (Math.round(n*1000)/10).toFixed(1) + '%';
+
+let FILES = [];   // {name, handle, version, followers, posts:[raw], error}
+
+function readFile(f){
+  return new Promise(res => {
+    const r = new FileReader();
+    r.onload = () => {
+      try{
+        const blob = JSON.parse(r.result);
+        const meta = blob.meta || {};
+        const posts = blob.posts || [];
+        if (!posts.length) {
+          const d = blob.diagnostics || {};
+          const attrs = Object.keys(d.attrNames || {});
+          res({name:f.name, error: attrs.length
+            ? 'no posts — capture ran but extracted nothing'
+            : 'no posts and no matching containers — selectors may need updating',
+            diag:d});
+          return;
+        }
+        res({name:f.name, handle: meta.handle || 'unknown',
+             version: Number(meta.version || 2), followers: meta.followers || null,
+             endedAt: meta.endedAt || '', posts});
+      }catch(e){ res({name:f.name, error:'not valid JSON'}); }
+    };
+    r.onerror = () => res({name:f.name, error:'could not read file'});
+    r.readAsText(f);
+  });
+}
+
+/** Dedupe by post ID across every file; later/richer records win. */
+function normalize(files, months, minEng){
+  const byId = new Map();
+  for (const f of files){
+    if (f.error) continue;
+    for (const rec of f.posts){
+      const id = String(rec.id || '').trim();
+      if (!id) continue;
+      const cur = byId.get(id) || {handle:f.handle, reactions:0, comments:0, reposts:0,
+                                   text:'', media_type:null};
+      cur.handle = f.handle;
+      for (const k of ['reactions','comments','reposts']){
+        const v = rec[k];
+        if (typeof v === 'number') cur[k] = Math.max(cur[k], v|0);
+      }
+      const txt = cleanText(rec.text);
+      if (txt && !cur.text) cur.text = txt;
+
+      let mt = rec.media_type || 'text';
+      // v2's media detection matched the `--with-carousel-fix` modifier present
+      // on every post, so everything non-video came back "document". Only
+      // "video" is trustworthy from those captures.
+      if (f.version < 3 && mt !== 'video' && mt !== 'text') mt = 'unknown';
+      // A real detected type always wins; otherwise keep the first thing seen,
+      // so an "unknown" from a v2 capture is not silently recorded as "text".
+      if (mt !== 'text' && mt !== 'unknown') cur.media_type = mt;
+      else if (cur.media_type === null) cur.media_type = mt;
+      byId.set(id, cur);
+    }
+  }
+
+  const cutoff = months ? Date.now() - months*31*864e5 : null;
+  const rows = [];
+  for (const [id, p] of byId){
+    const d = urnDate(id);
+    if (!d) continue;
+    if (cutoff && d.getTime() < cutoff) continue;
+    const eng = p.reactions + p.comments + p.reposts;
+    if (eng < minEng) continue;
+    rows.push({
+      handle: p.handle,
+      post_id: 'urn:li:activity:' + id,
+      url: 'https://www.linkedin.com/feed/update/urn:li:activity:' + id + '/',
+      posted_at: d.toISOString(), date: iso(d),
+      weekday: DAYS[(d.getUTCDay()+6)%7], hour_utc: d.getUTCHours(),
+      media_type: p.media_type || 'text', text: p.text, text_chars: p.text.length,
+      hashtags: (p.text.match(/#(\w+)/g)||[]).map(s=>s.slice(1)).join(' '),
+      reactions: p.reactions, comments: p.comments, reposts: p.reposts,
+      total_engagement: eng
+    });
+  }
+  rows.sort((a,b) => a.handle === b.handle
+    ? b.posted_at.localeCompare(a.posted_at) : a.handle.localeCompare(b.handle));
+  return rows;
+}
+
+function statsFor(rows, handle, followers){
+  const p = rows.filter(r => r.handle === handle);
+  if (!p.length) return null;
+  const eng = p.map(r => r.total_engagement).sort((a,b)=>a-b);
+  const dates = p.map(r => r.date).sort();
+  const days = Math.max(1,
+    Math.round((new Date(dates[dates.length-1]) - new Date(dates[0]))/864e5));
+  const sum = eng.reduce((a,b)=>a+b,0);
+  return {
+    handle, posts: p.length, days,
+    perWeek: p.length/(days/7),
+    avg: sum/p.length,
+    median: eng.length%2 ? eng[(eng.length-1)/2]
+                         : (eng[eng.length/2-1]+eng[eng.length/2])/2,
+    best: eng[eng.length-1],
+    pctComment: p.filter(r=>r.comments>0).length/p.length,
+    pctRepost:  p.filter(r=>r.reposts>0).length/p.length,
+    videos: p.filter(r=>r.media_type==='video').length,
+    followers: followers || null,
+    rate: followers ? (sum/p.length)/followers : null,
+    range: dates[0] + ' .. ' + dates[dates.length-1]
+  };
+}
+
+/* ---------------------------- rendering ---------------------------- */
+
+function renderFiles(){
+  const box = document.getElementById('files');
+  box.innerHTML = '';
+  FILES.forEach((f, i) => {
+    const el = document.createElement('div');
+    el.className = 'chip' + (f.error ? ' bad' : '');
+    el.innerHTML = f.error
+      ? `<span class="nm">${f.name}</span><span class="meta">${f.error}</span>`
+      : `<span class="nm">${f.handle}</span>
+         <span class="meta">${f.posts.length} posts · v${f.version}${
+           f.followers ? ' · ' + f.followers.toLocaleString() + ' followers'
+                       : ' · no follower count'}</span>`;
+    const x = document.createElement('button');
+    x.className = 'x'; x.textContent = '×'; x.title = 'Remove';
+    x.onclick = () => { FILES.splice(i,1); renderFiles(); refresh(); };
+    el.appendChild(x);
+    box.appendChild(el);
+  });
+  const any = FILES.some(f => !f.error);
+  document.getElementById('controls').classList.toggle('hide', !any);
+  document.getElementById('build').disabled = !any;
+}
+
+function refresh(){
+  const months = +document.getElementById('months').value;
+  const minEng = +document.getElementById('minEng').value || 0;
+  const rows = normalize(FILES, months, minEng);
+  const msg = document.getElementById('msg');
+  msg.innerHTML = '';
+
+  if (!rows.length){
+    document.getElementById('previewWrap').classList.add('hide');
+    if (FILES.some(f=>!f.error)) {
+      msg.innerHTML = `<div class="note err"><b>Nothing in this window</b>
+        <p>The captures hold posts, but none fall inside the window you picked.
+        Try a longer window.</p></div>`;
+    }
+    return rows;
+  }
+
+  const handles = [...new Set(rows.map(r=>r.handle))];
+  const folls = Object.fromEntries(FILES.filter(f=>!f.error).map(f=>[f.handle,f.followers]));
+  const stats = handles.map(h => statsFor(rows, h, folls[h])).filter(Boolean);
+  stats.sort((a,b)=>b.avg-a.avg);
+
+  const t = document.getElementById('preview');
+  t.innerHTML = '<thead><tr><th>handle</th><th>posts</th><th>days</th><th>posts/wk</th>'
+    + '<th>avg eng</th><th>median</th><th>best</th><th>% comment</th><th>% repost</th>'
+    + '<th>videos</th><th>eng rate</th></tr></thead><tbody>'
+    + stats.map(s => `<tr><td class="h">${s.handle}</td>
+        <td class="num">${s.posts}</td><td class="num">${s.days}</td>
+        <td class="num">${fmt1(s.perWeek)}</td><td class="num">${fmt1(s.avg)}</td>
+        <td class="num">${fmt1(s.median)}</td><td class="num">${s.best}</td>
+        <td class="num">${pct(s.pctComment)}</td><td class="num">${pct(s.pctRepost)}</td>
+        <td class="num">${s.videos}</td>
+        <td class="num">${s.rate ? (s.rate*100).toFixed(3)+'%' : '—'}</td></tr>`).join('')
+    + '</tbody>';
+
+  document.getElementById('previewSub').textContent =
+    `${rows.length} posts · ${handles.length} handle${handles.length>1?'s':''} · `
+    + stats.map(s=>s.range).join(' | ');
+  document.getElementById('previewWrap').classList.remove('hide');
+
+  const notes = [];
+  const zero = rows.filter(r=>r.total_engagement===0).length;
+  if (zero) notes.push(`<div class="note"><b>${zero} posts with zero engagement</b>
+    <p>Usually counts that hadn't rendered before the scroll passed them, not genuinely
+    dead posts. Re-capture that handle more slowly and add the second file.</p></div>`);
+  if (stats.some(s=>!s.followers)) notes.push(`<div class="note"><b>Missing follower counts</b>
+    <p>${stats.filter(s=>!s.followers).map(s=>s.handle).join(', ')} came from a v2 capture,
+    which didn't record followers. Average engagement is therefore not normalised for
+    audience size — re-capture with v3, or fill the follower column in the workbook before
+    comparing pages of different sizes.</p></div>`);
+  const unknown = rows.filter(r=>r.media_type==='unknown').length;
+  if (unknown) notes.push(`<div class="note"><b>${unknown} posts with unknown format</b>
+    <p>v2 captures mis-detected everything non-video. Only the video counts are reliable
+    for those handles; re-capture with v3 for the real format mix.</p></div>`);
+  msg.innerHTML = notes.join('');
+  return rows;
+}
+
+/* ---------------------------- workbook ----------------------------- *
+ * Values are computed here and written as plain numbers — no formulas, so
+ * there is nothing to recalculate and no chance of a silently wrong result
+ * from a function the reader's spreadsheet evaluates differently.
+ * ------------------------------------------------------------------- */
+
+function buildWorkbook(rows){
+  const wb = XLSX.utils.book_new();
+  const handles = [...new Set(rows.map(r=>r.handle))];
+  const folls = Object.fromEntries(FILES.filter(f=>!f.error).map(f=>[f.handle,f.followers]));
+  const stats = handles.map(h=>statsFor(rows,h,folls[h])).filter(Boolean)
+                       .sort((a,b)=>b.avg-a.avg);
+
+  const readme = [
+    ['LinkedIn competitive pull — method and limits'],[''],
+    ['Generated', new Date().toISOString().slice(0,16).replace('T',' ')],
+    ['Posts', rows.length], ['Handles', handles.join(', ')],[''],
+    ['WHAT IS MISSING, AND WHY IT CANNOT BE FIXED'],
+    ['Impressions / reach are admin-only. No vendor sells them for pages you do not own.'],
+    ['Any engagement rate here is engagement / FOLLOWERS, not / impressions, and is NOT'],
+    ['comparable to the rate shown in your own page analytics.'],
+    ['Follower history has no backfill — only the current total is public.'],
+    ['Follower demographics (function, seniority, industry, size) are admin-only.'],[''],
+    ['READ BEFORE COMPARING HANDLES'],
+    ['Capture windows differ per handle, so TOTALS are not comparable across handles.'],
+    ['Use the rate columns: posts/week, avg engagement, % commented, % reposted.'],
+    ['Raw engagement is not normalised for audience size unless the follower column is set.'],
+    ['Check handles are the same KIND of entity — a global corporate page and a country'],
+    ['subsidiary are not peers, however similar the brand.'],[''],
+    ['OTHER CAVEATS'],
+    ['Counts are point-in-time. Posts from the last ~72h are still accumulating.'],
+    ['hour_utc is UTC — convert before drawing conclusions about posting time.'],
+    ['Zero-engagement rows are usually counts that had not rendered before the scroll'],
+    ['passed them, not dead posts. Re-capture and merge to fill in.'],[''],
+    ['TERMS OF SERVICE'],
+    ["LinkedIn's User Agreement prohibits scraping regardless of technique. hiQ v. LinkedIn"],
+    ['(9th Cir. / N.D. Cal., settled Dec 2022) held that scraping public data does not'],
+    ['violate the CFAA, but that the User Agreement is an enforceable contract — hiQ paid'],
+    ['$500k and took a permanent injunction. This capture runs inside an authenticated'],
+    ['session. Not legal advice; run it past counsel before it becomes load-bearing.'],
+  ];
+  const wsR = XLSX.utils.aoa_to_sheet(readme);
+  wsR['!cols'] = [{wch:92},{wch:26}];
+  XLSX.utils.book_append_sheet(wb, wsR, 'README');
+
+  if (handles.length > 1){
+    const head = ['handle','posts','days covered','posts/week','avg engagement','median',
+                  'best post','% posts w/ comment','% posts w/ repost','videos',
+                  'followers','eng. rate/post'];
+    const body = stats.map(s=>[s.handle,s.posts,s.days,
+      Math.round(s.perWeek*10)/10, Math.round(s.avg*10)/10, s.median, s.best,
+      Math.round(s.pctComment*1000)/1000, Math.round(s.pctRepost*1000)/1000,
+      s.videos, s.followers || '', s.rate ? Math.round(s.rate*1e6)/1e6 : '']);
+    const grid = [['Competitive benchmark'],
+      ['Rate metrics lead — windows differ per handle, so totals are not comparable.'],[''],
+      head, ...body, [''], ['Average engagement by weekday — value, then (n) posts'],
+      ['handle', ...DAYS.map(d=>d.slice(0,3))]];
+    for (const h of handles){
+      const p = rows.filter(r=>r.handle===h);
+      grid.push([h, ...DAYS.map(d=>{
+        const q = p.filter(r=>r.weekday===d);
+        if (!q.length) return '—';
+        const a = q.reduce((s,r)=>s+r.total_engagement,0)/q.length;
+        return Math.round(a) + ' (' + q.length + ')';
+      })]);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(grid);
+    ws['!cols'] = [{wch:30},...Array(11).fill({wch:15})];
+    // percentage and rate columns
+    const first = 5, last = 4 + body.length;
+    for (let r=first; r<=last; r++){
+      for (const c of ['H','I']){ const cell = ws[c+r]; if (cell) cell.z = '0.0%'; }
+      const rt = ws['L'+r]; if (rt && typeof rt.v === 'number') rt.z = '0.000%';
+    }
+    XLSX.utils.book_append_sheet(wb, ws, 'Benchmark');
+  }
+
+  const cut = (key, title) => {
+    const vals = [...new Set(rows.map(r=>r[key]))];
+    const body = vals.map(v=>{
+      const p = rows.filter(r=>r[key]===v);
+      const sum = p.reduce((s,r)=>s+r.total_engagement,0);
+      return [v, p.length, sum, Math.round(sum/p.length*10)/10,
+              Math.round(p.length/rows.length*1000)/1000];
+    }).sort((a,b)=>b[1]-a[1]);
+    const tot = rows.reduce((s,r)=>s+r.total_engagement,0);
+    body.push(['TOTAL', rows.length, tot, Math.round(tot/rows.length*10)/10, 1]);
+    const ws = XLSX.utils.aoa_to_sheet([[title],[''],
+      [key,'posts','total engagement','avg engagement','share of posts'], ...body]);
+    ws['!cols'] = [{wch:24},{wch:12},{wch:18},{wch:16},{wch:15}];
+    for (let r=4; r<=3+body.length; r++){ const c = ws['E'+r]; if (c) c.z = '0.0%'; }
+    return ws;
+  };
+  XLSX.utils.book_append_sheet(wb, cut('media_type','Performance by content format'), 'Format Mix');
+  XLSX.utils.book_append_sheet(wb, cut('weekday','Performance by day of week'), 'Timing');
+
+  const cols = ['handle','post_id','url','posted_at','date','weekday','hour_utc',
+                'media_type','text','text_chars','hashtags','reactions','comments',
+                'reposts','total_engagement'];
+  const wsP = XLSX.utils.aoa_to_sheet([cols, ...rows.map(r=>cols.map(c=>r[c]))]);
+  wsP['!cols'] = cols.map(c => ({wch: c==='text'?60 : c==='url'?34 : c==='handle'?26 : 14}));
+  wsP['!autofilter'] = {ref: XLSX.utils.encode_range(
+    {s:{r:0,c:0}, e:{r:rows.length, c:cols.length-1}})};
+  wsP['!freeze'] = {xSplit:0, ySplit:1};
+  XLSX.utils.book_append_sheet(wb, wsP, 'Posts');
+
+  return wb;
+}
+
+/* ------------------------------ wiring ----------------------------- */
+
+const drop = document.getElementById('drop');
+const picker = document.getElementById('file');
+drop.onclick = () => picker.click();
+drop.onkeydown = e => { if (e.key==='Enter'||e.key===' '){ e.preventDefault(); picker.click(); } };
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e=>{
+  e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e=>{
+  e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => ingest(e.dataTransfer.files));
+// Snapshot to an array first: FileList is live, and clearing picker.value
+// (or the drop event completing) empties it mid-await, silently dropping
+// every file after the first.
+picker.onchange = () => { const picked = [...picker.files]; picker.value = ''; ingest(picked); };
+
+async function ingest(list){
+  for (const f of [...list]) FILES.push(await readFile(f));
+  renderFiles(); refresh();
+}
+
+document.getElementById('months').onchange = refresh;
+document.getElementById('minEng').oninput  = refresh;
+
+document.getElementById('build').onclick = () => {
+  const rows = refresh();
+  if (!rows.length) return;
+  const wb = buildWorkbook(rows);
+  const handles = [...new Set(rows.map(r=>r.handle))];
+  const name = (handles.length===1 ? handles[0] : handles.length+'-handles')
+             + '_linkedin_' + iso(new Date()) + '.xlsx';
+  const out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([out],
+    {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  document.getElementById('msg').insertAdjacentHTML('afterbegin',
+    `<div class="note ok"><b>Workbook downloaded</b><p>${name} — ${rows.length} posts across
+     ${handles.length} handle${handles.length>1?'s':''}.</p></div>`);
+};
+</script>
+</body>
+</html>
